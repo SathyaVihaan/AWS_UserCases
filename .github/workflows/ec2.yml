@@ -1,10 +1,10 @@
-name: Deploy EC2 Instance
+name: Create EC2 Instance
 
 on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  create-ec2:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,16 +16,27 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+        aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Launch EC2 instance
       run: |
         INSTANCE_ID=$(aws ec2 run-instances \
-          --image-id ami-0953476d60561c955 \  # Replace with your region's AMI
+          --image-id ami-0c55b159cbfafe1f0 \  # Replace with your region's AMI
           --count 1 \
           --instance-type t2.micro \
+          --key-name your-key-name \         # Replace with your key pair
+          --security-groups your-sg-name \   # Replace with your security group
           --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=GitHub-EC2}]' \
           --query 'Instances[0].InstanceId' \
           --output text)
 
         echo "Launched EC2 Instance ID: $INSTANCE_ID"
+
+        aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+
+        PUBLIC_IP=$(aws ec2 describe-instances \
+          --instance-ids $INSTANCE_ID \
+          --query 'Reservations[0].Instances[0].PublicIpAddress' \
+          --output text)
+
+        echo "EC2 Public IP: $PUBLIC_IP"
