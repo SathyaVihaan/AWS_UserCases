@@ -1,7 +1,7 @@
 name: Create EC2 Instance
 
 on:
-  workflow_dispatch:
+  push:
 
 jobs:
   create-ec2:
