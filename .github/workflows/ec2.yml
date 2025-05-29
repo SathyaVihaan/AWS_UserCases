@@ -1,44 +1,80 @@
-name: Create EC2 Instance on Push
-
+name: Manage EC2 Instance
+ 
 on:
-  push:
-    branches:
-      - main  # or your default branch
-
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'launch'
+        type: choice
+        options:
+          - launch
+          - terminate
+      ami_id:
+        description: 'AMI ID to use (only for launch)'
+        required: false
+        default: 'ami-0e35ddab05955cf57'
+      instance_type:
+        description: 'Instance type (only for launch)'
+        required: false
+        default: 't2.micro'
+      key_name:
+        description: 'Key pair name (only for launch)'
+        required: false
+        default: 'demo-key'
+      instance_id:
+        description: 'EC2 Instance ID (required for terminate)'
+        required: false
+        default: ''
+ 
 jobs:
-  create-ec2:
+  manage-ec2:
     runs-on: ubuntu-latest
-
+ 
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+ 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1  # Replace with your AWS region
-
-    - name: Launch EC2 instance
-      run: |
-        INSTANCE_ID=$(aws ec2 run-instances \
-          --image-id ami-0c55b159cbfafe1f0 \  # Replace with your region's AMI
-          --count 1 \
-          --instance-type t2.micro \
-          --key-name your-key-name \         # Replace with your key pair
-          --security-groups your-sg-name \   # Replace with your security group
-          --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=GitHub-EC2}]' \
-          --query 'Instances[0].InstanceId' \
-          --output text)
-
-        echo "Launched EC2 Instance ID: $INSTANCE_ID"
-
-        aws ec2 wait instance-running --instance-ids $INSTANCE_ID
-
-        PUBLIC_IP=$(aws ec2 describe-instances \
-          --instance-ids $INSTANCE_ID \
-          --query 'Reservations[0].Instances[0].PublicIpAddress' \
-          --output text)
-
-        echo "EC2 Public IP: $PUBLIC_IP"
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Launch EC2 Instance
+        if: ${{ github.event.inputs.action == 'launch' }}
+        id: launch
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id ${{ github.event.inputs.ami_id }} \
+            --count 1 \
+            --instance-type ${{ github.event.inputs.instance_type }} \
+            --key-name ${{ github.event.inputs.key_name }} \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=Demo-EC2}]' \
+            --query 'Instances[0].InstanceId' \
+            --output text)
+ 
+          echo "Launched instance: $INSTANCE_ID"
+          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
+ 
+      - name: Wait for EC2 instance to run
+        if: ${{ github.event.inputs.action == 'launch' }}
+        run: |
+          aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+          echo "Instance $INSTANCE_ID is running"
+ 
+      - name: Terminate EC2 Instance
+        if: ${{ github.event.inputs.action == 'terminate' }}
+        run: |
+          if [ -z "${{ github.event.inputs.instance_id }}" ]; then
+            echo "Error: Instance ID is required for termination"
+            exit 1
+          fi
+ 
+          aws ec2 terminate-instances --instance-ids ${{ github.event.inputs.instance_id }}
+          echo "Termination initiated for instance: ${{ github.event.inputs.instance_id }}"
