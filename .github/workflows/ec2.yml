@@ -14,7 +14,7 @@ on:
       ami_id:
         description: 'AMI ID to use (only for launch)'
         required: false
-        default: 'ami-0e35ddab05955cf57'
+        default: 'ami-0953476d60561c955'
       instance_type:
         description: 'Instance type (only for launch)'
         required: false
